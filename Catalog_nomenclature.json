@@ -1,6 +1,4 @@
-{
-"odata.metadata": "http://192.168.1.254/utp_prestige/odata/standard.odata/$metadata#Catalog_Номенклатура",
-"value": [{
+[{
 "Description": "\"Alpella\" молочный шоколад с фундуком 80г*18шт*6бл/Хамле №8012"
 },{
 "Description": "\"Alpella\" шоколадная палочка 40г*18шт*6бл/Хамле №08021"
@@ -6949,4 +6947,3 @@
 },{
 "Description": "Ящик картонний ДхШхВ 445х345х450мм, на чотири клапани"
 }]
-}
