@@ -166,6 +166,14 @@ class ProductParser:
             # Формат Kokolin (12*24*18gr)
             (r'(\d+)\s*[*]\s*(\d+)\s*[*]\s*(\d+)(?:g|gr|gx|г|гр|G|GR)',
              lambda m: (float(m.group(3)), int(m.group(2)), int(m.group(1)))),
+             
+            # Формат с пробелами и Х (36гр 12шт Х12бл)
+            (r'(\d+)\s*(?:g|gr|gx|г|гр|G|GR|ml|мл)\s+(\d+)\s*(?:шт|штХ|шт\s*[xXхХ])\s*[xXхХ]\s*(\d+)\s*(?:бл|блок|блоков)',
+             lambda m: (float(m.group(1)), int(m.group(2)), int(m.group(3)))),
+             
+            # Формат с пробелами и слитным штХ (15 гр 20штХ 4бл)
+            (r'(\d+)\s*(?:g|gr|gx|г|гр|G|GR|ml|мл)\s+(\d+)\s*штХ\s*(\d+)\s*(?:бл|блок|блоков)',
+             lambda m: (float(m.group(1)), int(m.group(2)), int(m.group(3)))),
         ]
 
     def _to_float(self, value: str) -> float:
