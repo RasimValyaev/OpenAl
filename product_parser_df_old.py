@@ -117,10 +117,8 @@ class ProductParser:
         # ML модель
         self.ml_model = MLModel()
 
-
         self.patterns = [
             # Шаблоны для извлечения чисел
-
             # Формат с * (16g*24pcs*12boxes)
             (
                 r"(\d+)(?:g|gr|gx|г|гр|G|GR|ml|мл)\s*[*]\s*(\d+)(?:\s*(?:pcs|pc|шт|p))?\s*[*]\s*(\d+)",
@@ -145,13 +143,18 @@ class ProductParser:
             (
                 r"(\d+[.,]\d+)\s*(?:g|gr|gx|г|гр|G|GR|ml|мл)[xXхХ*]\s*(\d+)[xXхХ*]\s*(\d+)",
                 lambda m: (
-                    self._to_float(m.group(1)),int(m.group(2)),int(m.group(3)),
+                    self._to_float(m.group(1)),
+                    int(m.group(2)),
+                    int(m.group(3)),
                 ),
             ),
             # Формат BLOX (12,5 гр 20 Х 30 бл)
             (
                 r"(\d+[.,]\d+)\s*(?:г|гр|gr|g|G|GR|мл|ml)\s+(\d+)\s*[хХxX]\s*(\d+)\s*(?:бл|блок|boxes|box)",
-                lambda m: (self._to_float(m.group(1)),int(m.group(2)),int(m.group(3)),
+                lambda m: (
+                    self._to_float(m.group(1)),
+                    int(m.group(2)),
+                    int(m.group(3)),
                 ),
             ),
             # Формат с размерами (10X48X28G)
@@ -163,14 +166,18 @@ class ProductParser:
             (
                 r"(\d+(?:[.,]\d+)?)\s*(?:g|gr|gx|г|гр|G|GR|ml|мл)\s*[xXхХ×]\s*(\d+)(?:\s*(?:pcs|pc|шт|p))?\s*[xXхХ×]\s*(\d+)",
                 lambda m: (
-                    self._to_float(m.group(1)),int(m.group(2)),int(m.group(3)),
+                    self._to_float(m.group(1)),
+                    int(m.group(2)),
+                    int(m.group(3)),
                 ),
             ),
             # Формат с × (7g×24pcs×24boxes)
             (
                 r"(\d+(?:[.,]\d+)?)\s*(?:g|gr|gx|г|гр|G|GR|ml|мл)\s*[×]\s*(\d+)(?:\s*(?:pcs|pc|шт|p))?\s*[×]\s*(\d+)",
                 lambda m: (
-                    self._to_float(m.group(1)),int(m.group(2)),int(m.group(3)),
+                    self._to_float(m.group(1)),
+                    int(m.group(2)),
+                    int(m.group(3)),
                 ),
             ),
             # Формат с весом и количеством (900grx6)
@@ -426,7 +433,7 @@ class ProductParser:
             return "bag", 1.0
         elif "vase" in text_lower:
             return "vase", 1.0
-        elif any(x in text_lower for x in ["бл", "блок", "box", "boxes","кт"]):
+        elif any(x in text_lower for x in ["бл", "блок", "box", "boxes", "кт"]):
             return "box", 1.0
         return "box", 0.5  # по умолчанию с низкой уверенностью
 
