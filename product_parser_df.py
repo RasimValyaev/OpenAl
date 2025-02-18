@@ -16,7 +16,17 @@ class MLModel:
         self.vectorizer = TfidfVectorizer(
             ngram_range=(1, 3),
             max_features=2000,
-            token_pattern=r"(?u)\b\w+\b|\d+(?:[.,]\d+)?(?:\s*(?:г|кг|шт|бл))?",
+            token_pattern=r"""
+                (?ui)
+                \b\p{L}+\b |
+                \d+(?:[.,]\d+)?
+                (?:\s*
+                (?:g|kg|pc|pcs|box|boxes|jar|jars|tray|trays|vase|vases|ml|
+                ad|adet|kutu|kavanoz|tepsi|vazo|
+                г|кг|шт|бл|ml|мл|g|kg|pc|pcs|box|boxes|jar|jars|tray|trays|vase|vases|уп|упак|упаковка|упаковки|банка
+                |банки|лоток|лотки|ваза|вазы|мілілітр|мілілітри|упаковка|упаковки|банка|банки|лоток|лотки|ваза|вази
+                ))?
+        """
         )
         self.classifier = RandomForestClassifier(
             n_estimators=100, max_depth=10, random_state=42
@@ -116,8 +126,6 @@ class ProductParser:
     def __init__(self):
         # ML модель
         self.ml_model = MLModel()
-
-
         self.patterns = [
             # Шаблоны для извлечения чисел
 
