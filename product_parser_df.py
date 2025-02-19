@@ -538,22 +538,22 @@ class ProductParser:
 
             # Get ML model predictions
             ml_predictions = self.ml_model.predict(text)
-            
+
             # Verify predictions match with re and improve model if needed
             self.ml_model.verify_and_improve(text, re_extracted)
-            
+
             # Use ML predictions if confidence is high, otherwise use re
             result = {}
             confidences = ml_predictions.get('confidences', {})
             max_confidence = 0.0
-            
+
             for key in re_extracted:
                 if key in confidences and confidences[key] >= 0.5:
                     result[key] = ml_predictions[key]
                     max_confidence = max(max_confidence, confidences[key])
                 else:
                     result[key] = re_extracted[key]
-            
+
             return {
                 "sku": text,
                 "weight": f"{result['weight']:g}",
@@ -592,7 +592,7 @@ class ProductParser:
         }
 
     def parse_products(self, products: List[str]) -> None:
-        """Parse a list of products"""
+        """Парсинг списка продуктов"""
         data = []
         success = 0
         failed = 0
@@ -641,15 +641,16 @@ class ProductParser:
 
 
 def create_backup(model_path):
-    """Create a backup of the model"""
+    """Создание резервной копии модели"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_name = model_path.split('.')[-2]
     backup_path = f"{model_name}_backup_{timestamp}.pkl"
     if os.path.exists(model_path):
         shutil.copy(model_path, backup_path)
-        print(f"Backup created: {backup_path}")
+        print(f"Резервная копия создана: {backup_path}")
     else:
-        print("Model file not found.")
+        print("Файл модели не найден.")
+
 
 
 def main():
