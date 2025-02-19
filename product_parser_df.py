@@ -96,8 +96,10 @@ class MLModel:
             if hasattr(clf, 'predict_proba'):
                 conf = max(clf.predict_proba(X)[0])
             else:
-                # For regressors, use a simple confidence metric based on training score
-                conf = clf.score(X, [pred])
+                # For regressors, use a simple confidence metric based on prediction variance
+                pred_std = np.std([tree.predict(X)[0] for tree in clf.estimators_])
+                pred_range = max(abs(pred), 1)  # Avoid division by zero
+                conf = max(0, min(1, 1 - (pred_std / pred_range)))
             predictions[param] = pred
             confidences[param] = conf
 
@@ -160,7 +162,14 @@ class MLModel:
         # Оценка качества для каждого параметра
         for param, clf in self.classifiers.items():
             y = [item[param] for item in self.train_data]
-            score = clf.score(X, y)
+            if hasattr(clf, 'predict_proba'):
+                # For classifiers, use accuracy score
+                y_pred = clf.predict(X)
+                score = sum(1 for i, j in zip(y, y_pred) if i == j) / len(y)
+            else:
+                # For regressors, use mean absolute percentage error
+                y_pred = clf.predict(X)
+                score = 1 - np.mean(np.abs((np.array(y) - y_pred) / np.maximum(np.abs(y), 1)))
             print(f"Точность ML модели ({param}): {score:.1%}")
 
     def verify_and_improve(self, text: str, re_extracted: Dict, max_iterations=5):
@@ -176,7 +185,6 @@ class MLModel:
                     break
 
             if not mismatch:
-                print(f"Предсказания совпадают с re после {iteration+1} итераций")
                 return True
 
             # Генерируем синтетические данные и дообучаем
@@ -184,7 +192,6 @@ class MLModel:
             self.train_data.extend(synthetic_data)
             self.train()
 
-        print(f"Не удалось достичь точного совпадения после {max_iterations} итераций")
         return False
 
 
