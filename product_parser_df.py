@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import pickle
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from products_source import test_products, data_initial_dict
@@ -32,10 +32,10 @@ class MLModel:
         # Отдельные классификаторы для каждого параметра
         self.classifiers = {
             'container_type': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
-            'weight': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
+            'weight': RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42),
             'weight_unit': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
-            'pieces': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
-            'containers': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42)
+            'pieces': RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42),
+            'containers': RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42)
         }
 
         # Начальные обучающие данные с расширенными параметрами
@@ -93,7 +93,11 @@ class MLModel:
 
         for param, clf in self.classifiers.items():
             pred = clf.predict(X)[0]
-            conf = max(clf.predict_proba(X)[0])
+            if hasattr(clf, 'predict_proba'):
+                conf = max(clf.predict_proba(X)[0])
+            else:
+                # For regressors, use a simple confidence metric based on training score
+                conf = clf.score(X, [pred])
             predictions[param] = pred
             confidences[param] = conf
 
