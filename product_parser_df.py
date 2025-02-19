@@ -6,8 +6,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
-from products_source import test_products
+from products_source import test_products, data_initial_dict
 import os
+import shutil
 
 
 class MLModel:
@@ -28,33 +29,23 @@ class MLModel:
                 ))?
         """
         )
-        self.classifier = RandomForestClassifier(
-            n_estimators=100, max_depth=10, random_state=42
-        )
+        # Отдельные классификаторы для каждого параметра
+        self.classifiers = {
+            'container_type': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
+            'weight': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
+            'weight_unit': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
+            'pieces': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42),
+            'containers': RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42)
+        }
 
-        # Начальные обучающие данные
-        self.initial_data = [
-            ("Diamond Light Candy boxes", "box"),
-            ("Ice Lolly Jelly boxes", "box"),
-            ("Jelly cup in Monkey Jar", "jar"),
-            ("Bear Pudding tray", "tray"),
-            ("Long CC Stick Candy bags", "bag"),
-            ("Colour Candy Ball Stick vases", "vase"),
-            ("BLOX жувальна гумка блок", "box"),
-            ("candy box", "box"),
-            ("candy jar", "jar"),
-            ("candy tray", "tray"),
-            ("candy bag", "bag"),
-            ("candy vase", "vase"),
-            ("KT", "box"),
-        ]
+        # Начальные обучающие данные с расширенными параметрами
+        self.initial_data = data_initial_dict
         self.train_data = []
         self.load_model()
 
         # Если модель новая, обучаем на начальных данных
         if not self.train_data:
-            texts, types = zip(*self.initial_data)
-            self.train(texts, types)
+            self.train_on_initial_data()
 
     def load_model(self):
         """Загрузка модели из файла"""
@@ -63,7 +54,7 @@ class MLModel:
                 with open(self.model_path, "rb") as f:
                     data = pickle.load(f)
                     self.vectorizer = data["vectorizer"]
-                    self.classifier = data["classifier"]
+                    self.classifiers = data["classifiers"]
                     self.train_data = data.get("train_data", [])
                 print(f"Загружена модель с {len(self.train_data)} обучающими примерами")
             except Exception as e:
@@ -78,48 +69,119 @@ class MLModel:
             pickle.dump(
                 {
                     "vectorizer": self.vectorizer,
-                    "classifier": self.classifier,
+                    "classifiers": self.classifiers,
                     "train_data": self.train_data,
                 },
                 f,
             )
 
-    def predict(self, text: str) -> Tuple[str, float]:
-        """Предсказание типа контейнера"""
+    def predict(self, text: str) -> Dict:
+        """Предсказание всех параметров"""
         if not self.train_data:
-            return "box", 0.0
+            return {
+                'container_type': "box",
+                'weight': 0.0,
+                'weight_unit': "g",
+                'pieces': 1,
+                'containers': 1,
+                'confidences': {k: 0.0 for k in self.classifiers.keys()}
+            }
 
         X = self.vectorizer.transform([text])
-        container_type = self.classifier.predict(X)[0]
-        confidence = max(self.classifier.predict_proba(X)[0])
-        return container_type, confidence
+        predictions = {}
+        confidences = {}
 
-    def train(self, texts: List[str], container_types: List[str], retrain=False):
-        """Обучение модели"""
-        if retrain:
-            self.train_data = list(self.initial_data)  # Начинаем с начальных данных
+        for param, clf in self.classifiers.items():
+            pred = clf.predict(X)[0]
+            conf = max(clf.predict_proba(X)[0])
+            predictions[param] = pred
+            confidences[param] = conf
 
-        # Добавляем новые данные
-        for text, container_type in zip(texts, container_types):
-            if (text, container_type) not in self.train_data:
-                self.train_data.append((text, container_type))
+        predictions['confidences'] = confidences
+        return predictions
 
+    def train_on_initial_data(self):
+        """Обучение на начальных данных"""
+        self.train_data = list(self.initial_data)
+        self.train(retrain=True)
+
+    def generate_synthetic_data(self, text: str, re_extracted: Dict) -> List[Dict]:
+        """Генерация синтетических данных на основе примера"""
+        synthetic_data = []
+
+        # Базовый пример
+        base = {
+            'text': text,
+            **re_extracted
+        }
+        synthetic_data.append(base)
+
+        # Генерируем вариации
+        variations = [
+            # Изменение порядка
+            f"{base['weight']}{base['weight_unit']}*{base['pieces']}pcs*{base['containers']}{base['container_type']}s",
+            f"{base['containers']}{base['container_type']}s {base['weight']}{base['weight_unit']} {base['pieces']}pcs",
+            # Изменение разделителей
+            f"{base['weight']}{base['weight_unit']} x {base['pieces']}pcs x {base['containers']}{base['container_type']}s",
+            f"{base['weight']}{base['weight_unit']}/{base['pieces']}pcs/{base['containers']}{base['container_type']}s",
+            # Добавление описательных слов
+            f"Product {base['weight']}{base['weight_unit']} with {base['pieces']}pcs in {base['containers']}{base['container_type']}s",
+        ]
+
+        for var_text in variations:
+            synthetic_data.append({
+                'text': var_text,
+                **re_extracted
+            })
+
+        return synthetic_data
+
+    def train(self, retrain=False):
+        """Обучение моделей"""
         if not self.train_data:
             return
 
-        # Разделяем данные на тексты и метки
-        texts, types = zip(*self.train_data)
-
-        # Обучаем модель
+        # Подготовка данных
+        texts = [item['text'] for item in self.train_data]
         X = self.vectorizer.fit_transform(texts)
-        self.classifier.fit(X, types)
+
+        # Обучение каждого классификатора
+        for param, clf in self.classifiers.items():
+            y = [item[param] for item in self.train_data]
+            clf.fit(X, y)
 
         # Сохраняем модель
         self.save_model()
 
-        # Оценка качества
-        score = self.classifier.score(X, types)
-        print(f"Точность ML модели: {score:.1%}")
+        # Оценка качества для каждого параметра
+        for param, clf in self.classifiers.items():
+            y = [item[param] for item in self.train_data]
+            score = clf.score(X, y)
+            print(f"Точность ML модели ({param}): {score:.1%}")
+
+    def verify_and_improve(self, text: str, re_extracted: Dict, max_iterations=5):
+        """Проверка и улучшение предсказаний"""
+        for iteration in range(max_iterations):
+            predictions = self.predict(text)
+
+            # Проверяем совпадение предсказаний с re_extracted
+            mismatch = False
+            for key in re_extracted:
+                if key != 'confidences' and predictions.get(key) != re_extracted[key]:
+                    mismatch = True
+                    break
+
+            if not mismatch:
+                print(f"Предсказания совпадают с re после {iteration+1} итераций")
+                return True
+
+            # Генерируем синтетические данные и дообучаем
+            synthetic_data = self.generate_synthetic_data(text, re_extracted)
+            self.train_data.extend(synthetic_data)
+            self.train()
+
+        print(f"Не удалось достичь точного совпадения после {max_iterations} итераций")
+        return False
 
 
 class ProductParser:
@@ -414,58 +476,110 @@ class ProductParser:
         ]
 
     def _to_float(self, value: str) -> float:
-        """Преобразование строки в число с учетом разных разделителей"""
+        """Convert string to float handling different decimal separators"""
         return float(value.replace(",", "."))
 
-    def _detect_container_type(self, text: str) -> Tuple[str, float]:
-        """Определение типа контейнера по тексту"""
-        # Сначала пробуем через ML
-        container_type, confidence = self.ml_model.predict(text)
-        if confidence > 0.8:  # Высокая уверенность ML
-            return container_type, confidence
-
-        # Если ML не уверен, используем правила
+    def _detect_container_type_re(self, text: str) -> str:
+        """Detect container type using regular expressions"""
         text_lower = text.lower()
-        if "tray" in text_lower:
-            return "tray", 1.0
-        elif "jar" in text_lower:
-            return "jar", 1.0
-        elif "bag" in text_lower:
-            return "bag", 1.0
-        elif "vase" in text_lower:
-            return "vase", 1.0
-        elif any(x in text_lower for x in ["бл", "блок", "box", "boxes","кт"]):
-            return "box", 1.0
-        return "box", 0.5  # по умолчанию с низкой уверенностью
+
+        if any(x in text_lower for x in ["jar", "jars", "банка", "банки", "каваноз"]):
+            return "jar"
+        elif any(x in text_lower for x in ["tray", "trays", "лоток", "лотки", "tepsi"]):
+            return "tray"
+        elif any(x in text_lower for x in ["vase", "vases", "ваза", "вазы", "vazo"]):
+            return "vase"
+        elif any(x in text_lower for x in ["bag", "bags"]):
+            return "bag"
+        elif any(x in text_lower for x in ["бл", "блок", "box", "boxes", "кт"]):
+            return "box"
+        return "box"  # default
+
+    def _detect_container_type(self, text: str) -> Tuple[str, float]:
+        """Detect container type using ML and regular expressions"""
+        # Get ML predictions
+        ml_predictions = self.ml_model.predict(text)
+        container_type = ml_predictions['container_type']
+        confidence = ml_predictions['confidences'].get('container_type', 0.0)
+
+        # If ML confidence is low, use regular expressions
+        if confidence < 0.5:
+            container_type = self._detect_container_type_re(text)
+            confidence = 1.0
+
+        return container_type, confidence
 
     def parse_product(self, text: str) -> Dict:
-        """Парсинг описания продукта"""
-        # Извлечение чисел
+        """Parse product description"""
+        # Extract numbers using regular expressions
+        weight, pieces, containers = 0.0, 1, 1
+        weight_unit = "ml" if "ml" in text.lower() else "g"
+        parsed = False
+
         for pattern, extractor in self.patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 try:
                     weight, pieces, containers = extractor(match)
-                    container_type, confidence = self._detect_container_type(text)
-
-                    # Если распознали через правила, дообучаем ML
-                    if confidence == 1.0:
-                        self.ml_model.train([text], [container_type])
-
-                    return {
-                        "sku": text,
-                        "weight": f"{weight:g}",
-                        "weight_unit": "мл" if "ml" in text.lower() else "г",
-                        "pieces": pieces,
-                        "containers": containers,
-                        "container_type": container_type,
-                        "confidence": f"{confidence:.1%}",
-                        "parsed": True,
-                    }
+                    parsed = True
+                    break
                 except (ValueError, IndexError):
                     continue
 
-        # Если не удалось разобрать
+        if parsed:
+            # Data extracted using regular expressions
+            re_extracted = {
+                "weight": weight,
+                "weight_unit": weight_unit,
+                "pieces": pieces,
+                "containers": containers,
+                "container_type": self._detect_container_type_re(text)
+            }
+
+            # Get ML model predictions
+            ml_predictions = self.ml_model.predict(text)
+            
+            # Verify predictions match with re and improve model if needed
+            self.ml_model.verify_and_improve(text, re_extracted)
+            
+            # Use ML predictions if confidence is high, otherwise use re
+            result = {}
+            confidences = ml_predictions.get('confidences', {})
+            max_confidence = 0.0
+            
+            for key in re_extracted:
+                if key in confidences and confidences[key] >= 0.5:
+                    result[key] = ml_predictions[key]
+                    max_confidence = max(max_confidence, confidences[key])
+                else:
+                    result[key] = re_extracted[key]
+            
+            return {
+                "sku": text,
+                "weight": f"{result['weight']:g}",
+                "weight_unit": result['weight_unit'],
+                "pieces": result['pieces'],
+                "containers": result['containers'],
+                "container_type": result['container_type'],
+                "confidence": f"{max_confidence:.1%}",
+                "parsed": True,
+            }
+
+        # If regex parsing failed, try ML only
+        ml_predictions = self.ml_model.predict(text)
+        if all(conf >= 0.7 for conf in ml_predictions.get('confidences', {}).values()):
+            return {
+                "sku": text,
+                "weight": f"{ml_predictions['weight']:g}",
+                "weight_unit": ml_predictions['weight_unit'],
+                "pieces": ml_predictions['pieces'],
+                "containers": ml_predictions['containers'],
+                "container_type": ml_predictions['container_type'],
+                "confidence": f"{min(ml_predictions['confidences'].values()):.1%}",
+                "parsed": True,
+            }
+
+        # If parsing failed
         return {
             "sku": text,
             "weight": "",
@@ -478,7 +592,7 @@ class ProductParser:
         }
 
     def parse_products(self, products: List[str]) -> None:
-        """Парсинг списка продуктов"""
+        """Parse a list of products"""
         data = []
         success = 0
         failed = 0
@@ -489,45 +603,59 @@ class ProductParser:
             if result["parsed"]:
                 success += 1
             else:
-                print(f"Не удалось разобрать: {text}")
+                print(f"Failed to parse: {text}")
                 failed += 1
 
+        # Create DataFrame
+        df = pd.DataFrame(data)
         if data:
-            # Создаем DataFrame
-            df = pd.DataFrame(data)
-
-            # Сортируем: сначала успешно разобранные, потом неразобранные
+            # Sort: successfully parsed first, then unparsed
             df = df.sort_values("parsed", ascending=False)
 
-            # Удаляем колонку parsed перед выводом
+            # Remove parsed column before display
             df = df.drop("parsed", axis=1)
 
-            # Выводим результаты
-            print("\nТаблица продуктов:")
+            # Display results
+            print("\nProducts table:")
             print(df.to_string(index=False))
 
-            # Сохраняем результаты
+            # Save results
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             df.to_excel(f"parser_results_{timestamp}.xlsx", index=False)
 
-        # Статистика
+        # Statistics
         total = success + failed
-        print(f"\nСтатистика:")
-        print(f"Всего продуктов: {total}")
-        print(f"Успешно разобрано: {success} ({success/total*100:.1f}%)")
+        print(f"\nStatistics:")
+        print(f"Total products: {total}")
+        print(f"Successfully parsed: {success} ({success/total*100:.1f}%)")
         if failed > 0:
-            print(f"Не удалось разобрать: {failed} ({failed/total*100:.1f}%)")
+            print(f"Failed to parse: {failed} ({failed/total*100:.1f}%)")
 
-        # Статистика по типам контейнеров
+        # Container type statistics
         if success > 0:
             containers = df["container_type"].value_counts()
-            print("\nИспользованные типы контейнеров:")
+            print("\nContainer types used:")
             for container, count in containers.items():
-                if container:  # Пропускаем пустые значения
+                if container:  # Skip empty values
                     print(f"{container}: {count} ({count/success*100:.1f}%)")
 
 
+def create_backup(model_path):
+    """Create a backup of the model"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_name = model_path.split('.')[-2]
+    backup_path = f"{model_name}_backup_{timestamp}.pkl"
+    if os.path.exists(model_path):
+        shutil.copy(model_path, backup_path)
+        print(f"Backup created: {backup_path}")
+    else:
+        print("Model file not found.")
+
+
 def main():
+    model_path = "ml_model.pkl"
+    create_backup(model_path)
+
     # Создаем парсер и запускаем
     parser = ProductParser()
     parser.parse_products(test_products)
