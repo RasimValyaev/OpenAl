@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from products_source import test_products
 import os
+import shutil
 
 
 class MLModel:
@@ -439,6 +440,7 @@ class ProductParser:
         return "box", 0.5  # по умолчанию с низкой уверенностью
 
     def parse_product(self, text: str) -> Dict:
+
         """Парсинг описания продукта"""
         # Извлечение чисел
         for pattern, extractor in self.patterns:
@@ -492,9 +494,9 @@ class ProductParser:
                 print(f"Не удалось разобрать: {text}")
                 failed += 1
 
+        # Создаем DataFrame
+        df = pd.DataFrame(data)
         if data:
-            # Создаем DataFrame
-            df = pd.DataFrame(data)
 
             # Сортируем: сначала успешно разобранные, потом неразобранные
             df = df.sort_values("parsed", ascending=False)
@@ -527,7 +529,23 @@ class ProductParser:
                     print(f"{container}: {count} ({count/success*100:.1f}%)")
 
 
+def create_backup(model_path):
+    """Создание резервной копии модели"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_name = model_path.split('.')[-2]
+    backup_path = f"{model_name}_backup_{timestamp}.pkl"
+    if os.path.exists(model_path):
+        shutil.copy(model_path, backup_path)
+        print(f"Резервная копия создана: {backup_path}")
+    else:
+        print("Файл модели не найден.")
+
+
+
 def main():
+    model_path = "ml_model.pkl"
+    create_backup(model_path)
+
     # Создаем парсер и запускаем
     parser = ProductParser()
     parser.parse_products(test_products)
