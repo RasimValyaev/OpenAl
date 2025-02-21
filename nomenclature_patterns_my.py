@@ -8,7 +8,7 @@ DECIMAL_POINT = locale.localeconv()["decimal_point"]
 # Pre-compile common patterns
 UNITS = r"(?:г|гр|грам|грамм|gram|g|gr|G|GR)"
 NUMBER = r"(\d+(?:[.,]\d+)?)"
-SEPARATOR = r"(?:\*|x|X|х|Х])" # r"[*xXхХ]"
+SEPARATOR = r"(?:\*|x|X|х|Х])?"
 PIECES = r"(?:шт|штук|pcs|ad|adt|adet|)"
 BLOCKS = r"(?:бл|блок|блоков|jar|jars|банка|банки|банці|kavanoz|tray|trays|лоток|лотки|tepsi|vase|vases|ваза|вазы|vazo|bag|bags|кт|box|boxes)"
 
@@ -29,14 +29,21 @@ def process_match(weight: str, pieces: int, boxes: int = 1) -> tuple:
 nomenclature_pattern = [
     # "COKOKREM" шоколадная паста 180г*6шт № 00061-00
     (
-        rf".*?(\d+(?:[.,]\d+)?)\s*(?:г|гр|грам|грамм|gram|g|gr|G|GR)(?:\.)?\s*(?:\*|x|X|х|Х])\s*(\d+)\s*(?:шт|штук|pcs|ad|adet)(?:\s+|$)",
+        rf".*?(\d+(?:[.,]\d+)?)\s*(?:г|гр|грам|грамм|gram|g|gr|G|GR)(?:\.)?\s*(?:\*|x|X|х|Х])?\s*(\d+)\s*(?:шт|штук|pcs|ad|adet)(?:\s+|$)",
         lambda m: process_match(extract_float(m.group(1)), 1, int(m.group(2))),
     ),
     # Яйце шоколадне "BARBELLA WORLD " з іграшкою в середині 25 гр 24Х6бл
     (
-        rf".*?(\d+(?:[.,]\d+)?)\s*(?:г|гр|грам|грамм|gram|g|gr|G|GR)\s*(\d+)\s*[*xXхХ]\s*(\d+)(?:бл|блок|блоков|jar|jars|банка|банки|банці|kavanoz|tray|trays|лоток|лотки|tepsi|vase|vases|ваза|вазы|vazo|bag|bags|кт|box|boxes)(?:\s+|$)",
+        rf".*?(\d+(?:[.,]\d+)?)\s*(?:г|гр|грам|грамм|gram|g|gr|G|GR)\s*(\d+)\s*(?:\*|x|X|х|Х])?\s*(\d+)(?:бл|блок|блоков|jar|jars|банка|банки|банці|kavanoz|tray|trays|лоток|лотки|tepsi|vase|vases|ваза|вазы|vazo|bag|bags|кт|box|boxes)(?:\s+|$)",
         lambda m: process_match(
             extract_float(m.group(1)), int(m.group(2)), int(m.group(3))
+        ),
+    ),
+    # Шоколадні цукерки BONART CHOCO COINS (монети)в пластиковій банці 100шт 500гр Х12
+    (
+        rf".*?(\d+)\s*(?:шт|штук|pcs|ad|adt|adet)\s*(?:\*|x|X|х|Х])?\s*(\d+(?:[.,]\d+)?)\s*(?:грамм|грам|гр|г|gram|g|gr|G|GR)\s*(?:\*|х|Х|x|X])?\s*(\d+)(?:\s+|$)",
+        lambda m: process_match(
+            extract_float(m.group(2)), int(m.group(1)), int(m.group(3))
         ),
     ),
 ]

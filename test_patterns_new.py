@@ -11,14 +11,23 @@ def find_match(text: str, patterns: List[Tuple]) -> Optional[Tuple[float, int, i
         match = re.search(pattern, text)  # Using search instead of match to find pattern anywhere in text
         if match:
             try:
-                return handler(match)
+                lst = list(handler(match))
+                lst.append(pattern)
+                return tuple(lst)
             except (ValueError, IndexError):
                 continue
     return None
 
 
-def format_result(sku:str, weight: str, pieces: int, boxes: int, parsed=False) -> dict:
-    return {'sku': sku, 'weight':weight,'pieces':pieces,'box': boxes, 'parsed':parsed}
+def format_result(sku:str, weight: str, pieces: int, boxes: int, pattern:str, parsed=False) -> dict:
+    return {
+        "sku": sku,
+        "weight": weight,
+        "pieces": pieces,
+        "box": boxes,
+        "pattern": pattern,
+        "parsed": parsed,
+    }
 
 
 # Test cases from real data
@@ -51,10 +60,10 @@ test_cases = [
 def extract_data_from_text(text:str)->dict:
     result = find_match(text, nomenclature_pattern)
     if result:
-        weight, pieces, boxes = result
-        formatted = format_result(text, weight, pieces, boxes, True)
+        weight, pieces, boxes, pattern = result
+        formatted = format_result(text, weight, pieces, boxes, pattern, True)
     else:
-        formatted = format_result(text, None, None, None, False)
+        formatted = format_result(text, None, None, None, None, False)
     return formatted
 
 
@@ -69,4 +78,6 @@ if __name__ == "__main__":
     columns = list(total[0].keys())
     df = pd.DataFrame(total, columns=columns)
     df = df.sort_values("parsed",ascending=False)
+    df.drop(columns="parsed", axis=1,inplace=True)
     print(df.to_string())
+    df.to_excel("df.xlsx",index=False)
