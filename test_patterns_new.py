@@ -1,6 +1,9 @@
+from os import name
 import re
 from typing import List, Tuple, Optional
-from nomenclature_patterns_new import nomenclature_pattern, extract_float
+from nomenclature_patterns_my import nomenclature_pattern
+import pandas as pd 
+
 
 def find_match(text: str, patterns: List[Tuple]) -> Optional[Tuple[float, int, int]]:
     """Try to match text against a list of patterns and return extracted values."""
@@ -13,18 +16,14 @@ def find_match(text: str, patterns: List[Tuple]) -> Optional[Tuple[float, int, i
                 continue
     return None
 
-def format_result(weight: float, pieces: int, boxes: int) -> str:
-    """Format the result string based on the number of parameters."""
-    if boxes > 1 and pieces > 1:
-        return f"{weight}г x {pieces}box x {boxes}"
-    elif boxes > 1:
-        return f"{weight}г x {pieces}шт x {boxes}"
-    else:
-        return f"{weight}г x {pieces}шт"
+
+def format_result(sku:str, weight: str, pieces: int, boxes: int, parsed=False) -> dict:
+    return {'sku': sku, 'weight':weight,'pieces':pieces,'box': boxes, 'parsed':parsed}
+
 
 # Test cases from real data
 test_cases = [
-    'Рулет "ALPELLA" молочный коктейль с абрикосом 290г*12шт №573',
+    'Рулет "ALPELLA" молочный коктейль с абрикосом 290,25г*12шт №573',
     'Шок.кон."Карнавал" 330гр*6шт бол.сердце пл. фундук №837-3',
     'Рулет "Peki" с какао кремом 150г*15шт/Хамле №7105',
     'Шоколад "Мадлен" 430гр*14шт № 91005451',
@@ -48,17 +47,26 @@ test_cases = [
     'Печ.сах. "Лора" с маршмаллоу со вкусом клубники глазированное 30г*60шт №302',
 ]
 
-# Run tests
-print("Testing patterns with real data:")
-print("-" * 80)
-for text in test_cases:
+
+def extract_data_from_text(text:str)->dict:
     result = find_match(text, nomenclature_pattern)
     if result:
         weight, pieces, boxes = result
-        formatted = format_result(weight, pieces, boxes)
-        print(f"✓ {text}")
-        print(f"  -> {formatted}")
+        formatted = format_result(text, weight, pieces, boxes, True)
     else:
-        print(f"✗ {text}")
-        print("  -> No match")
-    print("-" * 80)
+        formatted = format_result(text, None, None, None, False)
+    return formatted
+
+
+if __name__ == "__main__":
+    total = []
+    df = pd.DataFrame()
+    for text in test_cases:
+        result = extract_data_from_text(text)
+        total.append(result)
+        print("-" * 80)
+
+    columns = list(total[0].keys())
+    df = pd.DataFrame(total, columns=columns)
+    df = df.sort_values("parsed",ascending=False)
+    print(df.to_string())
