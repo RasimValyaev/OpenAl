@@ -6,15 +6,15 @@ locale.setlocale(locale.LC_ALL, "")
 DECIMAL_POINT = locale.localeconv()["decimal_point"]
 
 # Pre-compile common patterns
-UNITS = r"(?:г|гр|грам|грамм|gram|g|gr|G|GR)"
+UNITS = r"(?:грамм|грам|гр|г|gram|g|gr|G|GR)"
 NUMBER = r"(\d+(?:[.,]\d+)?)"
 SEPARATOR = r"[*xXхХ]"
 PIECES = r"(?:шт|штук|pcs|ad|adet|шт\.|\s*)"
 BLOCKS = r"(?:бл|блок|блоков|jar|jars|банка|банки|банці|kavanoz|tray|trays|лоток|лотки|tepsi|vase|vases|ваза|вазы|vazo|bag|bags|кт|box|boxes)"
 
-def extract_float(text: str) -> float:
+def extract_float(text: str) -> str:
     """Convert string to float handling different decimal separators."""
-    return float(text.replace(",", DECIMAL_POINT).replace(".", DECIMAL_POINT))
+    return str(text.replace(",", DECIMAL_POINT).replace(".", DECIMAL_POINT))
 
 def process_match(weight: str, pieces: int, boxes: int = 1) -> tuple:
     """Process matches to handle special cases."""
