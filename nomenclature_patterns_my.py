@@ -15,7 +15,7 @@ BLOCKS = r"(?:бл|блок|блоков|jar|jars|банка|банки|банц
 
 def extract_float(text: str) -> float:
     """Convert string to float handling different decimal separators."""
-    return float(text.replace(",", DECIMAL_POINT).replace(".", DECIMAL_POINT))
+    return text.replace(",", DECIMAL_POINT).replace(".", DECIMAL_POINT)
 
 
 def process_match(weight: str, pieces: int, boxes: int = 1) -> tuple:
@@ -24,6 +24,8 @@ def process_match(weight: str, pieces: int, boxes: int = 1) -> tuple:
         # If we have both pieces and boxes > 1, treat pieces as boxes
         return weight, pieces, boxes
     return weight, pieces, boxes
+
+
 nomenclature_pattern = [
     # "COKOKREM" шоколадная паста 180г*6шт № 00061-00
     (
