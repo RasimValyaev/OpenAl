@@ -106,7 +106,7 @@ if __name__ == "__main__":
         print(f"Всего книг извлечено: {len(parsed_data['sku'])}")
         print("\nПример данных (первые 3 книги):")
         for i, sku in enumerate(parsed_data['sku']):
-            print(f"{str(i + 1).zfill(4)}. {sku['sku']}; {sku['code']}; {sku['gr']}")
+            print(f"{str(i + 1).zfill(4)}; {sku['sku']}; {sku['code']}; {sku['gr']}")
 
         # Сохранение результатов
         with open("deepseek_parsed_books.json", "w", encoding="utf-8") as f:
