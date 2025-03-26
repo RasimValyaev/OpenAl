@@ -1,5 +1,10 @@
 # pip install requests tiktoken python-dotenv
-
+# извлекает информацию из текста с помощью DeepSeek API.
+# Скрипт отправляет запрос к API DeepSeek, получает ответ в формате JSON и парсит его.
+# Извлекает последние 10 курсов покупки и продажи из текста и выводит их в формате: "покупка: {покупка}; продажа: {продажа}; время: {время}"
+# Также подсчитывает количество токенов в запросе и ответе, а также стоимость запроса.
+# и считает стоимость запроса
+# !!! из-за кеширования DeepSeek, нужно добавлять случайность в запросы, иначе будет кешированный ответ
 import tiktoken
 import requests
 import json
@@ -46,7 +51,7 @@ def extract_info(content: str, model: str = "deepseek-chat"):
         "messages": [
             {
                 "role": "system",
-                # "content": "Получи цену и рейтинг на все книги со страницы строго в json формате: {[ {rate: str, price: float, rating: int} ]}."
+                # "content": "Получи цену и рейтинг на все книги со страницы строго в json формате: {[ {data: str, price: float, rating: int} ]}."
                 "content": "Извлеки первые 10 строк из таблицы. Нужны курсы покупки и продажи в json формате: "
                            "{курсы: [{покупка: float, продажа: float}, время:time]}. "
                            "Результат отсортируй в порядке убывания времени"
@@ -123,8 +128,8 @@ if __name__ == "__main__":
 
         print("\n--- РЕЗУЛЬТАТЫ ПАРСИНГА ---")
         print(f"Всего книг извлечено: {len(parsed_data['курсы'])}")
-        for i, rate in enumerate(parsed_data['курсы']):
-            print(f"{i + 1}. {rate['покупка']}; {rate['продажа']}; {rate['время']}")
+        for i, data in enumerate(parsed_data['курсы']):
+            print(f"{i + 1}. {data['покупка']}; {data['продажа']}; {data['время']}")
 
         # Сохранение результатов
         with open("deepseek_parsed_rates.json", "w", encoding="utf-8") as f:

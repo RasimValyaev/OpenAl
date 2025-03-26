@@ -1,9 +1,12 @@
 # pip install requests tiktoken python-dotenv
-
+# извлекает информацию из текста с помощью DeepSeek API.
+# Скрипт отправляет запрос к API DeepSeek, получает ответ в формате JSON и парсит его.
+# Извлекает грамм, шт, блок из текста и выводит их в формате: "грамм: {грамм}; шт: {шт}; блок: {блок}"
+# Также подсчитывает количество токенов в запросе и ответе, а также стоимость запроса.
+# и считает стоимость запроса
 import tiktoken
 import requests
 import json
-import time
 from typing import Dict
 from dotenv import dotenv_values
 
