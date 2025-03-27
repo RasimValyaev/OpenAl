@@ -5,3 +5,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.xls*
+.env
+*.png
+*.html
+*.json
