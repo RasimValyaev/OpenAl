@@ -30,7 +30,7 @@ initial_balance = float(config.get("INITIAL_BALANCE", 0.0))
 async def extract_data_from_postgresql():
     user = config["PG_USER"]
     password = config["PG_PASSWORD"]
-    host = config["PG_HOST"]
+    host = config["PG_HOST_LOCAL"]  # config["PG_HOST"]
     port = config["PG_PORT"]
     dbname = config["PG_DBNAME"]
     
@@ -38,13 +38,36 @@ async def extract_data_from_postgresql():
         user=user, password=password, host=host, 
         port=port, database=dbname
     )
-    
-    records = await conn.fetch(
-        """SELECT DISTINCT osnd FROM t_pb WHERE date_time_dat_od_tim_p::date >= '25.03.2025'::date Limit 5;"""
-    )
+    sql = """
+            SELECT
+                id AS id_banka,
+                idklienta,
+                aut_my_acc,
+                aut_cntr_crf,
+                aut_cntr_nam,
+                osnd,
+                sum_e,
+                date_time_dat_od_tim_p,
+                trantype
+            FROM t_pb
+            WHERE date_time_dat_od_tim_p::date >= '20.03.2025'::date
+                AND aut_my_crf <> aut_cntr_crf
+                AND aut_cntr_crf NOT IN (SELECT DISTINCT aut_my_crf AS aut_my_crf2 FROM t_pb)
+            ORDER BY 
+                date_time_dat_od_tim_p, id
+            ;    
+        """
+
+    records = await conn.fetch(sql)
+
+    # Преобразуем результаты запроса в DataFrame
+    df = pd.DataFrame(records, columns=[
+        "id_banka", "idklienta", "aut_my_acc", "aut_cntr_crf",
+        "aut_cntr_nam", "osnd", "sum_e", "date_time_dat_od_tim_p", "trantype"
+    ])
+
     await conn.close()
-    
-    return pd.DataFrame(records, columns=["osnd"])
+    return df
 
 
 # Извлечение информации с помощью DeepSeek
@@ -62,15 +85,16 @@ async def extract_info(content: str, session: aiohttp.ClientSession, model: str 
                     "за_что: str,"
                     "номер_договора: str, "
                     "номер_счета: str, "
-                    "номер_накладной: str,"
-                    "номер_заказа: str,"
-                    "дата:date,"
-                    "НДС:float,"
-                    "период:str"
+                    "номер_накладной: str, "
+                    "номер_заказа: str, "
+                    "дата:date, "
+                    "НДС:float, "
+                    "период:str "
                 "}"
                 " Если отсутствует информация, выведи пустоту. НДС извлеки не %, а сумму. "
                 "Дату выводи в формате: dd.mm.yyyy."
-                "Период выводи в формате: mm.yyyy",
+                "Период выводи в формате: mm.yyyy"
+                "за_что выводи коротко. только суть.",
             },
             {"role": "user", "content": content},
         ],
@@ -229,12 +253,12 @@ async def extract_from_deepseek_main():
             for i, row in df.iterrows():
                 task = process_content(row["osnd"], i, session, MODEL)
                 tasks.append(task)
-            
+
             # Выполняем задачи параллельно с ограничением в 5 одновременных запросов
             for i in range(0, len(tasks), 5):
                 batch = tasks[i:i+5]
                 results = await asyncio.gather(*batch)
-                
+
                 for j, data in enumerate(results):
                     if data:
                         idx = i + j
@@ -246,7 +270,7 @@ async def extract_from_deepseek_main():
                         df.loc[idx, "дата"] = data["дата"]
                         df.loc[idx, "НДС"] = data["НДС"]
                         df.loc[idx, "период"] = data["период"]
-                
+
                 # Небольшая задержка между батчами
                 await asyncio.sleep(1)
 
