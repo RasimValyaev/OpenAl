@@ -94,7 +94,7 @@ async def extract_info(content: str, session: aiohttp.ClientSession, model: str 
                 " Если отсутствует информация, выведи пустоту. НДС извлеки не %, а сумму. "
                 "Дату выводи в формате: dd.mm.yyyy."
                 "Период выводи в формате: mm.yyyy"
-                "за_что выводи коротко. только суть.",
+                "за_что - выводи коротко. Например: за товар, за услугу, комиссия... . "
             },
             {"role": "user", "content": content},
         ],
@@ -237,6 +237,7 @@ async def process_content(content: str, i: int, session: aiohttp.ClientSession, 
 async def extract_from_deepseek_main():
     MODEL = "deepseek-chat"
     df = await extract_data_from_postgresql()
+    df['sum_e'] = df['sum_e'].astype(float)
     
     try:
         df["назначение"] = ""
@@ -245,7 +246,7 @@ async def extract_from_deepseek_main():
         df["номер_накладной"] = ""
         df["номер_заказа"] = ""
         df["дата"] = ""
-        df["НДС"] = ""
+        df["НДС"] = 0.0
         df["период"] = ""
 
         async with aiohttp.ClientSession() as session:
