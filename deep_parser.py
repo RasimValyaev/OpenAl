@@ -1,8 +1,12 @@
 import tiktoken
 import requests
 import json
+import time
 from typing import Dict, Any
 from dotenv import dotenv_values
+import os
+import pandas as pd
+import psycopg2
 
 # Загрузка переменных окружения
 config = dotenv_values(".env")
@@ -13,38 +17,55 @@ BASE_URL = "https://api.deepseek.com/v1"
 initial_balance = float(config.get("INITIAL_BALANCE", 0.0))
 
 
-def scrape_html(url: str) -> str:
-    """Получение HTML-кода страницы"""
-    response = requests.get(url)
-    return response.text
+# из быза pg, таб t_pb извлечем уникальные данные
+def extract_data_from_postgresql():
+    user = config["PG_USER"]
+    password = config["PG_PASSWORD"]
+    host = config["PG_HOST"]
+    port = config["PG_PORT"]
+    dbname = config["PG_DBNAME"]
+    conn = psycopg2.connect(
+        user=user, password=password, host=host, port=port, dbname=dbname
+    )
+    df = pd.read_sql_query(
+        """SELECT DISTINCT osnd FROM t_pb WHERE date_time_dat_od_tim_p::date >= '01.03.2025'::date;""", conn
+    )
+    conn.close()
+    return df
 
 
+# Извлечение информации с помощью DeepSeek
 def extract_info(content: str, model: str = "deepseek-chat"):
-    """Извлечение информации с помощью DeepSeek"""
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
     payload = {
         "model": model,
         "messages": [
             {
                 "role": "system",
-                "content": "Получи наименования, код и грамм со страницы строго в json формате: {sku: [ {sku: str, code: str, gr: str} ]}."
+                "content": "Получи НДС, дату, номера договора, накладной, счета "
+                           "строго в json формате: "
+                           "{"
+                           "за_что: str,"
+                           "номер_договора: str, "
+                           "номер_счета: str, "
+                           "номер_накладной: str,"
+                           "номер_заказа: str,"
+                           "дата:date,"
+                           "НДС:float,"
+                           "период:str"
+                           "}"
+                           " Если отсутствует информация, выведи пустоту. НДС извлеки не %, а сумму. "
+                           "Дату выводи в формате: dd.mm.yyyy."
+                           "Период выводи в формате: mm.yyyy",
             },
-            {
-                "role": "user",
-                "content": content
-            }
+            {"role": "user", "content": content},
         ],
-        "response_format": {"type": "json_object"}
+        "response_format": {"type": "json_object"},
     }
 
     response = requests.post(
-        f"{BASE_URL}/chat/completions",
-        headers=headers,
-        json=payload
+        f"{BASE_URL}/chat/completions", headers=headers, json=payload
     )
 
     if response.status_code == 200:
@@ -53,18 +74,93 @@ def extract_info(content: str, model: str = "deepseek-chat"):
         raise Exception(f"API Error: {response.status_code} - {response.text}")
 
 
+# Подсчет количества токенов в тексте
 def count_tokens(text: str, model: str = "deepseek-chat") -> int:
     """Подсчет количества токенов в тексте"""
-    encoding = tiktoken.get_encoding("cl100k_base")  # DeepSeek использует ту же кодировку
+    encoding = tiktoken.get_encoding(
+        "cl100k_base"
+    )  # DeepSeek использует ту же кодировку
     return len(encoding.encode(text))
 
 
+# Получение актуальных тарифов DeepSeek
+def get_deepseek_pricing():
+    """Получает актуальные тарифы DeepSeek с официального сайта документации"""
+    try:
+        url = "https://api-docs.deepseek.com/quick_start/pricing"
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            print(
+                f"Не удалось получить данные о тарифах. Код ответа: {response.status_code}"
+            )
+            return {
+                "deepseek-chat": {"input": 0.00027, "output": 0.0011}
+            }  # Возвращаем значения по умолчанию
+
+        # Используем DeepSeek для извлечения информации о тарифах из HTML
+        pricing_html = response.text
+
+        # Извлекаем информацию о ценах с помощью DeepSeek
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Извлеки актуальные тарифы для модели deepseek-chat из документации. "
+                               "Нужны цены за 1K токенов для input и output в долларах США. "
+                               'Верни только числа в формате JSON: {"input": X.XXXXX, "output": X.XXXXX}.'
+                               "Данные извлекай для cache miss и текущего времени. "
+                               "Часовой пояс UTC+2.",
+                },
+                {"role": "user", "content": pricing_html},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.1,
+        }
+
+        pricing_response = requests.post(
+            f"{BASE_URL}/chat/completions", headers=headers, json=payload
+        )
+
+        if pricing_response.status_code == 200:
+            pricing_data = json.loads(
+                pricing_response.json()["choices"][0]["message"]["content"]
+            )
+            print(
+                f"Получены актуальные тарифы: input=${pricing_data['input']}, output=${pricing_data['output']} за 1K токенов"
+            )
+            return {
+                "deepseek-chat": {
+                    "input": pricing_data["input"],
+                    "output": pricing_data["output"],
+                }
+            }
+        else:
+            print(
+                f"Ошибка при извлечении тарифов: {pricing_response.status_code} - {pricing_response.text}"
+            )
+            return {
+                "deepseek-chat": {"input": 0.00027, "output": 0.0011}
+            }  # Возвращаем значения по умолчанию
+
+    except Exception as e:
+        print(f"Ошибка при получении тарифов: {str(e)}")
+        return {
+            "deepseek-chat": {"input": 0.00027, "output": 0.0011}
+        }  # Возвращаем значения по умолчанию
+
+
+# Расчет стоимости запроса
 def calculate_cost(input_tokens: int, output_tokens: int, model: str = "deepseek-chat") -> Dict[str, float]:
     """Расчет стоимости запроса"""
-    # Актуальные тарифы DeepSeek (проверьте перед использованием)
-    rates = {
-        "deepseek-chat": {"input": 0.001, "output": 0.002}  # $ за 1K токенов
-    }
+    # Получаем актуальные тарифы
+    rates = get_deepseek_pricing()
 
     input_cost = (input_tokens / 1000) * rates[model]["input"]
     output_cost = (output_tokens / 1000) * rates[model]["output"]
@@ -72,47 +168,81 @@ def calculate_cost(input_tokens: int, output_tokens: int, model: str = "deepseek
     return {
         "input_cost": input_cost,
         "output_cost": output_cost,
-        "total_cost": input_cost + output_cost
+        "total_cost": input_cost + output_cost,
     }
 
 
-if __name__ == "__main__":
-    # URL = "http://sku.toscrape.com/"
-    URL = "https://eviza.com.tr/product-category/chewing-gum"
+def extraxt_from_deepseek_main():
     MODEL = "deepseek-chat"
+    df = extract_data_from_postgresql()
 
     try:
-        html_content = scrape_html("https://r.jina.ai/" + URL)
-        input_tokens = count_tokens(html_content)
+        df["назначение"] = ""
+        df["номер_договора"] = ""
+        df["номер_счета"] = ""
+        df["номер_накладной"] = ""
+        df["номер_заказа"] = ""
+        df["дата"] = ""
+        df["НДС"] = ""
+        df["период"] = ""
 
-        # Извлечение информации
-        result = extract_info(html_content, MODEL)
-        output_tokens = count_tokens(result)
+        for i, row in df.iterrows():
+            print("-" * 80)
+            content = row["osnd"]
+            # contents = df["osnd"].tolist()
 
-        # Расчет стоимости
-        cost = calculate_cost(input_tokens, output_tokens, MODEL)
+            # for i, content in enumerate(contents):
 
-        # Отчет о стоимости
-        print("\n--- ОТЧЕТ О СТОИМОСТИ ПАРСИНГА ---")
-        print(f"Модель: {MODEL}")
-        print(f"Входные токены: {input_tokens:,} (${cost['input_cost']:.4f})")
-        print(f"Выходные токены: {output_tokens:,} (${cost['output_cost']:.4f})")
-        print(f"ИТОГО: ${cost['total_cost']:.4f}")
+            # получаем информацию о входящих токенах
+            # input_tokens = count_tokens(content)
 
-        # Парсинг и вывод результатов
-        parsed_data = json.loads(result)
+            # Извлечение информации
+            result = extract_info(content, MODEL)
 
-        print("\n--- РЕЗУЛЬТАТЫ ПАРСИНГА ---")
-        print(f"Всего книг извлечено: {len(parsed_data['sku'])}")
-        print("\nПример данных (первые 3 книги):")
-        for i, sku in enumerate(parsed_data['sku']):
-            print(f"{str(i + 1).zfill(4)}; {sku['sku']}; {sku['code']}; {sku['gr']}")
+            # получаем информацию об исходящих токенах
+            # output_tokens = count_tokens(result)
 
-        # Сохранение результатов
-        with open("deepseek_parsed_books.json", "w", encoding="utf-8") as f:
-            json.dump(parsed_data, f, ensure_ascii=False, indent=2)
+            # Расчет стоимости
+            # cost = calculate_cost(input_tokens, output_tokens, MODEL)
 
-        print("\nРезультаты сохранены в deepseek_parsed_books.json")
+            # Отчет о стоимости
+            # print("\n--- ОТЧЕТ О СТОИМОСТИ ПАРСИНГА ---")
+            # print(f"Модель: {MODEL}")
+            # print(f"Входные токены: {input_tokens:,} (${cost['input_cost']:.4f})")
+            # print(f"Выходные токены: {output_tokens:,} (${cost['output_cost']:.4f})")
+            # print(f"ИТОГО: ${cost['total_cost']:.4f}")
+
+            # Парсинг и вывод результатов
+            data = json.loads(result)
+
+            # добавим в Series значения
+            df.loc[i, "назначение"] = data["за_что"]
+            df.loc[i, "номер_договора"] = data["номер_договора"]
+            df.loc[i, "номер_счета"] = data["номер_счета"]
+            df.loc[i, "номер_накладной"] = data["номер_накладной"]
+            df.loc[i, "номер_заказа"] = data["номер_заказа"]
+            df.loc[i, "дата"] = data["дата"]
+            df.loc[i, "НДС"] = data["НДС"]
+            df.loc[i, "период"] = data["период"]
+
+            print(f"content:{i + 1}\n"
+                  f"{content}\n"
+                  f"за_что:{data['за_что']}\n"
+                  f"номер_договора: {data['номер_договора']}\n"
+                  f"номер_счета: {data['номер_счета']}\n"
+                  f"номер_накладной: {data['номер_накладной']}\n"
+                  f"номер_заказа: {data['номер_заказа']}\n"
+                  f"дата: {data['дата']}\n"
+                  f"НДС:{data['НДС']}\n"
+                  f"период:{data['период']}\n"
+                  )
 
     except Exception as e:
         print(f"Ошибка: {str(e)}")
+
+    # Сохраненим результаты в excel
+    df.to_excel("deepseek_parsed_data.xlsx", index=False)
+
+
+if __name__ == "__main__":
+    extraxt_from_deepseek_main()

@@ -3,14 +3,14 @@ import requests
 import json
 import time
 from typing import Dict, Any
-from dotenv import dotenv_values
+from dotenv import load_dotenv
 import os
 import pandas as pd
 import psycopg2
 
-# Загрузка переменных окружения
-config = dotenv_values(".env")
-API_KEY =  config["DEEPSEEK_API_KEY"]  # Ключ должен быть в .env
+# 1. Загружаем переменные из файла .env в окружение
+load_dotenv()  # берёт .env из текущей директории
+API_KEY =  os.getenv("DEEPSEEK_API_KEY")  # Ключ должен быть в .env
 BASE_URL = "https://api.deepseek.com/v1"
 
 # Начальный баланс (указывается вручную в .env)
@@ -19,11 +19,11 @@ initial_balance = float(config.get("INITIAL_BALANCE", 0.0))
 
 # из быза pg, таб t_pb извлечем уникальные данные
 def extract_data_from_postgresql():
-    user = config["PG_USER"]
-    password = config["PG_PASSWORD"]
-    host = config["PG_HOST"]
-    port = config["PG_PORT"]
-    dbname = config["PG_DBNAME"]
+    user = os.getenv("PG_USER")
+    password = os.getenv("PG_PASSWORD")
+    host = os.getenv("PG_HOST")
+    port = os.getenv("PG_PORT")
+    dbname = os.getenv("PG_DBNAME")
     conn = psycopg2.connect(
         user=user, password=password, host=host, port=port, dbname=dbname
     )
@@ -247,3 +247,5 @@ def extraxt_from_deepseek_main():
 
 if __name__ == "__main__":
     extraxt_from_deepseek_main()
+    
+    

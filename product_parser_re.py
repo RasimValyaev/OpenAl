@@ -12,7 +12,6 @@ class ProductParser:
     def __init__(self):
         self.patterns = nomenclature_pattern
 
-
     def _detect_container_type_re(self, text: str) -> str:
         """Detect container type using regular expressions"""
         text_lower = text.lower()
@@ -33,7 +32,7 @@ class ProductParser:
         weight, pieces, containers = 0.0, 1, 1
         weight_unit = "ml" if "ml" in text.lower() else "g"
         parsed = False
-
+        pattern = ""
         for pattern, extractor in self.patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
@@ -130,8 +129,6 @@ def create_backup(model_path):
 
 
 def main_product_parser_re():
-    model_path = "ml_model.pkl"
-    create_backup(model_path)
 
     # Создаем парсер и запускаем
     parser = ProductParser()
