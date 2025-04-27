@@ -1,3 +1,7 @@
+# Скачать и установить Ollama с официального сайта: https://ollama.com/download
+# После установки запустить Ollama
+# Убедиться, что модель "gemma3:latest" загружена (или изменить код, чтобы использовать другую доступную модель)
+
 from datetime import datetime
 
 import ollama
@@ -19,23 +23,29 @@ async def async_ollama_generate(model: str, prompt: str) -> str:
     Returns:
         str: Ответ от модели
     """
-    # Получаем URL Ollama API из переменной окружения или используем стандартный
-    ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-
-    # Формируем данные для запроса
-    data = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False
-    }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{ollama_host}/api/generate", json=data) as response:
-            if response.status != 200:
-                raise Exception(f"Ошибка API: {response.status}")
-
-            result = await response.json()
-            return result.get("response", "")
+    # Используем официальный Python-клиент Ollama
+    # Запускаем синхронный код в асинхронном контексте
+    loop = asyncio.get_event_loop()
+    try:
+        # Запускаем синхронный код в отдельном потоке
+        response = await loop.run_in_executor(
+            None,
+            lambda: ollama.chat(model=model, messages=[{"role": "user", "content": prompt}])
+            # lambda: ollama.generate(model="model_name", prompt="Ваш запрос")
+        )
+        return response['message']['content']
+    except Exception as e:
+        print(f"Ошибка при запросе к Ollama API (chat): {e}")
+        try:
+            # Пробуем альтернативный метод
+            response = await loop.run_in_executor(
+                None,
+                lambda: ollama.generate(model=model, prompt=prompt)
+            )
+            return response['response']
+        except Exception as e2:
+            print(f"Ошибка при запросе к Ollama API (generate): {e2}")
+            raise Exception(f"Не удалось получить ответ от Ollama API: {e}, {e2}")
 
 
 def clean_llm_json_response(response_text: str) -> Any:
@@ -141,7 +151,9 @@ async def main_async(text: List[str], save_to_file: bool = False) -> Optional[Li
         return results
 
     except Exception as e:
+        import traceback
         print(f"Произошла ошибка: {e}")
+        traceback.print_exc()
         return None
 
 
@@ -162,5 +174,5 @@ def main(text: List[str], save_to_file: bool = False) -> Optional[List[Dict[str,
 if __name__ == "__main__":
     from products_source import test_products
     print(f"Начало обработки... {datetime.now()}")
-    main(test_products[:5], save_to_file=True)
+    main(test_products[:3], save_to_file=True)
     print(f"Конец обработки... {datetime.now()}")
